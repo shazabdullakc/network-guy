@@ -21,6 +21,7 @@ dependencies = [
     "pandas>=2.0.0",
     "openai>=1.0.0",
     "google-genai>=1.0.0",
+    "prompt-toolkit (>=3.0.52,<4.0.0)",
 ]
 
 [project.optional-dependencies]

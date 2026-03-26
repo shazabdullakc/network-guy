@@ -2,7 +2,7 @@
 
 Inspired by Claude Code's interactive interface:
 - Welcome banner with ASCII art + system info
-- Slash commands for quick actions
+- Slash commands with autocomplete (type / to see suggestions)
 - Persistent session with conversation memory
 - Status bar showing model + data stats
 """
@@ -12,6 +12,11 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from prompt_toolkit import PromptSession
+from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.formatted_text import HTML  # used in prompt display
+from prompt_toolkit.history import InMemoryHistory
+from prompt_toolkit.styles import Style as PTStyle
 from rich.columns import Columns
 from rich.console import Console
 from rich.markdown import Markdown
@@ -23,20 +28,6 @@ from network_guy import __version__
 
 console = Console()
 
-# ASCII art logo
-LOGO = r"""
-    _   __     __                      __
-   / | / /__  / /___      ______  ____/ /__
-  /  |/ / _ \/ __/ | /| / / __ \/ __/ //_/
- / /|  /  __/ /_ | |/ |/ / /_/ / / / ,<
-/_/ |_/\___/\__/ |__/|__/\____/_/ /_/|_|
-   / ____/  __  __  __  __
-  / / __/ / / / / / / / /
- / /_/ / /_/ / /_/ /_/ /
- \____/\__,_/\__, /\__, /
-            /____//____/
-"""
-
 LOGO_SMALL = r"""
  ┌─┐
  │N│ Network Guy
@@ -44,19 +35,94 @@ LOGO_SMALL = r"""
  └─┘
 """
 
-SLASH_COMMANDS = {
-    "/help": "Show all available commands",
-    "/devices": "List all network devices and status",
-    "/topology": "Display network topology map",
-    "/incidents": "List all open incidents",
-    "/security-scan": "Run full security audit",
-    "/metrics <device>": "Show metrics for a device (e.g., /metrics ROUTER-LAB-01)",
-    "/blast <device>": "Calculate blast radius for a device",
-    "/history": "Show conversation history",
-    "/clear": "Clear the screen",
-    "/export": "Export session to markdown file",
-    "/exit": "End session",
-}
+# Command definitions: (command, description, args_hint)
+COMMAND_DEFS = [
+    ("/help", "Show all available commands", None),
+    ("/devices", "List all network devices and status", None),
+    ("/topology", "Display network topology map", None),
+    ("/incidents", "List all open incidents", None),
+    ("/security-scan", "Run full security audit", None),
+    ("/metrics", "Show metrics for a device", "<device-name>"),
+    ("/blast", "Calculate blast radius for a device", "<device-name>"),
+    ("/history", "Show conversation history", None),
+    ("/clear", "Clear the screen", None),
+    ("/export", "Export session to markdown file", None),
+    ("/exit", "End session", None),
+]
+
+# Device names for argument completion
+DEVICE_NAMES = [
+    "ROUTER-LAB-01", "ROUTER-LAB-02",
+    "SW-LAB-01", "SW-LAB-02",
+    "FIREWALL-01", "FIREWALL-02",
+    "LB-LAB-01", "LB-LAB-02",
+    "5G-AMF-01", "5G-SMF-01", "5G-UPF-01",
+    "ENODEB-SIM-01", "PACKET-BROKER-01",
+    "DNS-SERVER-01", "MGMT-SERVER-01",
+]
+
+# For backward-compatible dict access
+SLASH_COMMANDS = {cmd: desc for cmd, desc, _ in COMMAND_DEFS}
+
+
+class NetworkGuyCompleter(Completer):
+    """Autocomplete for slash commands and device names.
+
+    - Type `/` → shows all slash commands with descriptions
+    - Type `/me` → filters to /metrics
+    - Type `/metrics ` → shows device names
+    - Type `/blast R` → filters devices starting with R
+    """
+
+    def get_completions(self, document, complete_event):
+        text = document.text_before_cursor
+        word = document.get_word_before_cursor(WORD=True)
+
+        # Completing a slash command
+        if text.startswith("/"):
+            parts = text.split(maxsplit=1)
+            cmd_part = parts[0]
+
+            # If we have a space after the command, complete device names
+            if len(parts) > 1 and cmd_part in ("/metrics", "/blast"):
+                device_prefix = parts[1].upper()
+                for device in DEVICE_NAMES:
+                    if device.startswith(device_prefix):
+                        yield Completion(
+                            device,
+                            start_position=-len(parts[1]),
+                            display=device,
+                            display_meta="device",
+                        )
+                return
+
+            # Complete slash commands
+            for cmd, desc, args in COMMAND_DEFS:
+                if cmd.startswith(cmd_part):
+                    display_text = f"{cmd} {args}" if args else cmd
+                    yield Completion(
+                        cmd + " " if args else cmd,
+                        start_position=-len(cmd_part),
+                        display=display_text,
+                        display_meta=desc,
+                    )
+
+        # If user just typed `/` with nothing else, show all commands
+        elif text == "":
+            return
+
+
+# prompt_toolkit style — cyan prompt, dim suggestions
+PT_STYLE = PTStyle.from_dict({
+    "prompt": "ansicyan bold",
+    "completion-menu": "bg:ansibrightblack ansiwhite",
+    "completion-menu.completion": "bg:ansibrightblack ansiwhite",
+    "completion-menu.completion.current": "bg:ansicyan ansiblack",
+    "completion-menu.meta": "bg:ansibrightblack ansigray italic",
+    "completion-menu.meta.current": "bg:ansicyan ansiblack italic",
+    "scrollbar.background": "bg:ansibrightblack",
+    "scrollbar.button": "bg:ansicyan",
+})
 
 
 def show_welcome(provider_info: dict, data_stats: dict):
@@ -177,14 +243,27 @@ def run_repl(data_dir: str = "./data"):
     # --- Conversation state ---
     history: list[dict] = []
 
+    # --- Setup prompt_toolkit session with autocomplete ---
+    completer = NetworkGuyCompleter()
+    prompt_history = InMemoryHistory()
+    session = PromptSession(
+        completer=completer,
+        history=prompt_history,
+        style=PT_STYLE,
+        complete_while_typing=True,
+        complete_in_thread=True,
+    )
+
+    provider_name = provider_info.get("provider", "no LLM")
+    model_name = provider_info.get("model", "N/A")
+
     # --- REPL loop ---
     while True:
         try:
-            show_status_bar(
-                provider_info.get("provider", "no LLM"),
-                provider_info.get("model", "N/A"),
-            )
-            user_input = console.input("[bold cyan]❯[/bold cyan] ").strip()
+            show_status_bar(provider_name, model_name)
+            user_input = session.prompt(
+                HTML("<ansicyan><b>❯ </b></ansicyan>"),
+            ).strip()
         except (EOFError, KeyboardInterrupt):
             console.print("\n[dim]Goodbye.[/dim]")
             break
