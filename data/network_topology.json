@@ -1,0 +1,36 @@
+{
+  "lab_network": "NET-LAB-ALPHA",
+  "description": "Primary R&D Test Network - Feature Validation Lab",
+  "last_updated": "2024-03-15T08:00:00Z",
+  "topology": {
+    "nodes": [
+      { "id": "D001", "name": "ROUTER-LAB-01", "type": "core_router", "role": "Primary Gateway", "interfaces": ["GE0/0", "GE0/1", "GE0/2"] },
+      { "id": "D002", "name": "ROUTER-LAB-02", "type": "core_router", "role": "Secondary Gateway", "interfaces": ["GE0/0", "GE0/1"] },
+      { "id": "D003", "name": "SW-LAB-01", "type": "switch", "role": "Distribution", "interfaces": ["GE0/0-47"] },
+      { "id": "D005", "name": "FIREWALL-01", "type": "firewall", "role": "Perimeter Security", "interfaces": ["eth0", "eth1", "eth2"] },
+      { "id": "D007", "name": "LB-LAB-01", "type": "load_balancer", "role": "Traffic Distribution", "interfaces": ["mgmt", "ext", "int"] },
+      { "id": "D013", "name": "PACKET-BROKER-01", "type": "packet_broker", "role": "Traffic Monitoring", "interfaces": ["net1", "net2", "tool1", "tool2"] },
+      { "id": "D014", "name": "DNS-SERVER-01", "type": "server", "role": "DNS/NTP", "interfaces": ["eth0"] }
+    ],
+    "links": [
+      { "from": "D001", "to": "D002", "type": "BGP_PEERING", "protocol": "BGP", "vlan": null, "bandwidth": "10G", "status": "UP" },
+      { "from": "D001", "to": "D003", "type": "TRUNK", "protocol": "802.1Q", "vlan": [100, 200, 300], "bandwidth": "10G", "status": "UP" },
+      { "from": "D002", "to": "D003", "type": "TRUNK", "protocol": "802.1Q", "vlan": [100, 200, 300], "bandwidth": "10G", "status": "UP" },
+      { "from": "D003", "to": "D005", "type": "ACCESS", "protocol": "Ethernet", "vlan": 100, "bandwidth": "1G", "status": "UP" },
+      { "from": "D005", "to": "D007", "type": "ACCESS", "protocol": "Ethernet", "vlan": 200, "bandwidth": "1G", "status": "UP" },
+      { "from": "D003", "to": "D013", "type": "SPAN", "protocol": "Ethernet", "vlan": null, "bandwidth": "10G", "status": "UP" },
+      { "from": "D001", "to": "D014", "type": "MGMT", "protocol": "Ethernet", "vlan": 999, "bandwidth": "1G", "status": "UP" }
+    ]
+  },
+  "routing_protocols": {
+    "ospf": { "enabled": true, "area": "0.0.0.0", "participants": ["D001", "D002", "D003"] },
+    "bgp": { "enabled": true, "local_as": 65001, "peers": [{ "peer_ip": "10.0.0.2", "remote_as": 65001, "type": "iBGP" }, { "peer_ip": "192.168.100.1", "remote_as": 65100, "type": "eBGP" }] },
+    "mpls": { "enabled": true, "protocol": "LDP", "lsp_count": 24 }
+  },
+  "vlans": [
+    { "id": 100, "name": "MGMT", "subnet": "10.0.0.0/24", "gateway": "10.0.0.1" },
+    { "id": 200, "name": "DATA", "subnet": "10.1.0.0/24", "gateway": "10.1.0.1" },
+    { "id": 300, "name": "VOICE", "subnet": "10.2.0.0/24", "gateway": "10.2.0.1" },
+    { "id": 999, "name": "OOB_MGMT", "subnet": "192.168.1.0/24", "gateway": "192.168.1.1" }
+  ]
+}

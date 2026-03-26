@@ -1,0 +1,92 @@
+{
+  "incidents": [
+    {
+      "ticket_id": "INC-2024-0315-001",
+      "title": "NET-LAB-ALPHA Core Router Instability - BGP Drop + High CPU",
+      "severity": "P1",
+      "status": "OPEN",
+      "created_at": "2024-03-15T08:16:00Z",
+      "reported_by": "auto-monitor",
+      "assigned_to": "unassigned",
+      "affected_network": "NET-LAB-ALPHA",
+      "affected_devices": ["D001"],
+      "symptom_summary": "ROUTER-LAB-01 experiencing high CPU (78%), memory pressure, BGP session drops, and interface GE0/2 failure simultaneously. Lab network degraded - 30% packet loss reported by test automation.",
+      "user_reported_description": "Our 5G feature regression suite is failing. Multiple test cases timing out. Started around 8:15 AM. Router seems unstable.",
+      "alerts_triggered": [
+        "CPU_HIGH_THRESHOLD_BREACH",
+        "MEMORY_LOW_WARNING",
+        "INTERFACE_DOWN_GE02",
+        "BGP_SESSION_DROP",
+        "PACKET_LOSS_HIGH"
+      ],
+      "mttr_target_minutes": 30,
+      "business_impact": "5G regression test suite blocked. Feature validation for Sprint-24 delayed.",
+      "timeline": [
+        { "time": "08:10", "event": "CPU alert triggered at 78%" },
+        { "time": "08:12", "event": "Memory warning: 90% utilized" },
+        { "time": "08:15", "event": "GE0/2 interface went DOWN" },
+        { "time": "08:15", "event": "BGP peer 10.0.0.3 session dropped" },
+        { "time": "08:16", "event": "P1 incident auto-created" },
+        { "time": "08:17", "event": "bgpd process crash detected" },
+        { "time": "08:19", "event": "bgpd auto-restarted" },
+        { "time": "08:20", "event": "GE0/2 auto-recovered" },
+        { "time": "08:22", "event": "BGP session re-established" }
+      ],
+      "previous_similar_incidents": ["INC-2024-0228-003", "INC-2024-0301-007"]
+    },
+    {
+      "ticket_id": "INC-2024-0315-002",
+      "title": "NET-LAB-BETA SW-LAB-02 Down - Cannot Reach Lab Nodes",
+      "severity": "P2",
+      "status": "OPEN",
+      "created_at": "2024-03-15T07:20:00Z",
+      "reported_by": "john.doe@telecom.com",
+      "assigned_to": "unassigned",
+      "affected_network": "NET-LAB-BETA",
+      "affected_devices": ["D004", "D008"],
+      "symptom_summary": "SW-LAB-02 is completely unreachable. Connected devices including LB-LAB-02 are also down. Lab network NET-LAB-BETA is isolated.",
+      "user_reported_description": "None of our BETA lab devices are reachable. SSH is timing out. The switch in Rack-B Slot-2 shows no lights on the management port.",
+      "alerts_triggered": [
+        "DEVICE_UNREACHABLE_SW-LAB-02",
+        "DEVICE_UNREACHABLE_LB-LAB-02",
+        "LAB_NETWORK_ISOLATED_BETA"
+      ],
+      "mttr_target_minutes": 60,
+      "business_impact": "IPv6 feature testing on NET-LAB-BETA completely blocked.",
+      "timeline": [
+        { "time": "07:00", "event": "Scheduled maintenance window ended" },
+        { "time": "07:15", "event": "SW-LAB-02 stopped responding to SNMP polls" },
+        { "time": "07:20", "event": "P2 incident created by engineer" },
+        { "time": "07:45", "event": "LB-LAB-02 also marked unreachable (dependent device)" }
+      ],
+      "previous_similar_incidents": []
+    },
+    {
+      "ticket_id": "INC-2024-0315-003",
+      "title": "5G UPF Pod Crash Loop - User Plane Down",
+      "severity": "P1",
+      "status": "IN_PROGRESS",
+      "created_at": "2024-03-15T08:11:00Z",
+      "reported_by": "auto-monitor",
+      "assigned_to": "sarah.chen@telecom.com",
+      "affected_network": "NET-LAB-5G",
+      "affected_devices": ["D011"],
+      "symptom_summary": "5G-UPF-01 is in ERROR state. Kubernetes pod for UPF is in CrashLoopBackOff. All GTP tunnels are down. 5G data plane testing is completely blocked.",
+      "user_reported_description": "UPF container keeps crashing every 2 minutes. We upgraded the chart version yesterday. 5G end-to-end tests are all failing at the GTP tunnel establishment step.",
+      "alerts_triggered": [
+        "K8S_POD_CRASHLOOP_UPF",
+        "GTP_TUNNEL_DOWN_ALL",
+        "5G_DATAPLANE_FAILURE"
+      ],
+      "mttr_target_minutes": 45,
+      "business_impact": "All 5G end-to-end data plane test cases blocked. Cannot validate new UPF feature.",
+      "timeline": [
+        { "time": "2024-03-14T18:00", "event": "Helm chart upgrade performed: UPF v23.R1.0 → v23.R1.1" },
+        { "time": "2024-03-15T08:08", "event": "UPF pod entered CrashLoopBackOff" },
+        { "time": "2024-03-15T08:11", "event": "P1 incident auto-created" },
+        { "time": "2024-03-15T08:20", "event": "Assigned to Sarah Chen" }
+      ],
+      "previous_similar_incidents": ["INC-2024-0210-002"]
+    }
+  ]
+}
