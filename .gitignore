@@ -9,3 +9,8 @@ dist/
 .chroma/
 *.db
 .DS_Store
+
+# Node / frontend
+node_modules/
+website/dist/
+.vite/
