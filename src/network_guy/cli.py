@@ -17,6 +17,8 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markdown import Markdown
+from rich.panel import Panel
 from rich.table import Table
 
 app = typer.Typer(
@@ -30,12 +32,11 @@ console = Console()
 _stores: dict = {}
 
 
-def _get_stores():
-    """Get initialized stores or error if not initialized."""
-    if not _stores:
-        console.print("[red]Error: Run 'network-guy init' first.[/red]")
-        raise typer.Exit(1)
-    return _stores
+def _ensure_init(data_dir: str = "./data") -> dict:
+    """Initialize stores if not already done. Returns stores dict."""
+    if _stores:
+        return _stores
+    return init(data_dir=data_dir)
 
 
 @app.command()
@@ -54,7 +55,6 @@ def init(data_dir: str = typer.Option("./data", help="Path to data directory")):
 
     console.print("[bold green]Initializing Network Guy...[/bold green]")
 
-    # Step 1: Parse all files
     with console.status("Parsing data files..."):
         data = load_all_data(data_path)
 
@@ -66,22 +66,17 @@ def init(data_dir: str = typer.Option("./data", help="Path to data directory")):
     console.print(f"  Parsed: {len(data['security_events'])} security events")
     console.print(f"  Parsed: {len(data['traffic_flows'])} traffic flows")
 
-    # Step 2: Initialize stores
     with console.status("Building stores..."):
         vector_store = VectorStore()
         metrics_db = MetricsDB()
         topo_graph = TopologyGraph()
-
-        # Step 3: Embed and load data into stores
         stats = embed_all_data(data, vector_store, metrics_db, topo_graph)
 
-    # Store globally for other commands
     _stores["vector"] = vector_store
     _stores["metrics"] = metrics_db
     _stores["graph"] = topo_graph
     _stores["raw_data"] = data
 
-    # Display summary
     console.print("\n[bold green]Stores ready:[/bold green]")
 
     table = Table(title="Data Store Summary")
@@ -100,47 +95,218 @@ def init(data_dir: str = typer.Option("./data", help="Path to data directory")):
     table.add_row("NetworkX", "Topology edges", str(stats["topology_edges"]))
 
     console.print(table)
-    console.print("\n[bold green]Ready for queries![/bold green]")
+
+    # Show LLM provider info
+    from network_guy.llm import get_provider_info
+    provider_info = get_provider_info()
+    if provider_info["active"]:
+        console.print(
+            f"\n[bold green]LLM:[/bold green] {provider_info['provider']} "
+            f"({provider_info['model']})"
+        )
+    else:
+        console.print(
+            "\n[yellow]Warning: No LLM API key detected. Set one of: "
+            "DEEPSEEK_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY, GROK_API_KEY[/yellow]"
+        )
+
+    console.print("[bold green]Ready for queries![/bold green]")
 
     return _stores
 
 
 @app.command()
-def query(question: str = typer.Argument(help="Your troubleshooting question")):
+def query(
+    question: str = typer.Argument(help="Your troubleshooting question"),
+    data_dir: str = typer.Option("./data", help="Path to data directory"),
+):
     """Ask a single troubleshooting question."""
-    console.print(f"[bold]Query:[/bold] {question}")
-    console.print("[yellow]Not yet implemented. Coming in Phase 3.[/yellow]")
+    from network_guy.supervisor import process_query
+
+    stores = _ensure_init(data_dir)
+
+    console.print(Panel(question, title="Query", border_style="blue"))
+
+    with console.status("Running 5 agents in parallel..."):
+        rca = process_query(
+            query=question,
+            vector_store=stores["vector"],
+            metrics_db=stores["metrics"],
+            topo_graph=stores["graph"],
+            raw_data=stores["raw_data"],
+        )
+
+    # Display the LLM response (markdown formatted)
+    console.print()
+    console.print(Panel(
+        Markdown(rca.raw_llm_response),
+        title="Root Cause Analysis",
+        border_style="green",
+    ))
+
+    # Display security verdict
+    if rca.security_verdict.value == "ATTACK":
+        console.print(Panel(
+            rca.security_detail,
+            title="SECURITY ALERT",
+            border_style="red",
+        ))
+    elif rca.security_detail:
+        console.print(f"\n[dim]Security: {rca.security_detail}[/dim]")
+
+    # Display blast radius if available
+    if rca.affected_devices:
+        console.print(f"\n[bold]Blast Radius:[/bold] {', '.join(rca.affected_devices)}")
+
+    # Display historical match
+    if rca.historical_match:
+        console.print(f"[bold]Historical Match:[/bold] {rca.historical_match}")
 
 
 @app.command()
-def chat():
+def chat(data_dir: str = typer.Option("./data", help="Path to data directory")):
     """Start an interactive multi-turn troubleshooting session."""
-    console.print("[bold green]Starting interactive session...[/bold green]")
-    console.print("[yellow]Not yet implemented. Coming in Phase 4.[/yellow]")
+    from network_guy.supervisor import process_query
+
+    stores = _ensure_init(data_dir)
+
+    console.print(Panel(
+        "Type your questions. Enter 'exit' or 'quit' to end.",
+        title="Interactive Troubleshooting Session",
+        border_style="green",
+    ))
+
+    while True:
+        try:
+            question = console.input("\n[bold blue]You:[/bold blue] ")
+        except (EOFError, KeyboardInterrupt):
+            break
+
+        if question.strip().lower() in ("exit", "quit", "q", ""):
+            break
+
+        with console.status("Analyzing..."):
+            rca = process_query(
+                query=question,
+                vector_store=stores["vector"],
+                metrics_db=stores["metrics"],
+                topo_graph=stores["graph"],
+                raw_data=stores["raw_data"],
+            )
+
+        console.print()
+        console.print(Markdown(rca.raw_llm_response))
+
+        if rca.security_verdict.value == "ATTACK":
+            console.print(f"\n[bold red]SECURITY ALERT:[/bold red] {rca.security_detail}")
+
+    console.print("\n[dim]Session ended.[/dim]")
 
 
 @app.command()
-def devices():
+def devices(data_dir: str = typer.Option("./data", help="Path to data directory")):
     """List all network devices and their current status."""
-    console.print("[yellow]Not yet implemented. Coming in Phase 4.[/yellow]")
+    stores = _ensure_init(data_dir)
+    raw_data = stores["raw_data"]
+
+    table = Table(title="Network Device Inventory")
+    table.add_column("Name", style="cyan")
+    table.add_column("Type", style="white")
+    table.add_column("Vendor", style="white")
+    table.add_column("Version", style="white")
+    table.add_column("Network", style="blue")
+    table.add_column("Status", style="white")
+    table.add_column("Uptime", justify="right")
+
+    status_colors = {"UP": "green", "DOWN": "red", "DEGRADED": "yellow", "ERROR": "red"}
+
+    for d in raw_data.get("devices", []):
+        color = status_colors.get(d.status.value, "white")
+        table.add_row(
+            d.device_name,
+            d.device_type,
+            d.vendor,
+            d.software_version,
+            d.lab_network,
+            f"[{color}]{d.status.value}[/{color}]",
+            f"{d.uptime_hours}h",
+        )
+
+    console.print(table)
 
 
 @app.command()
-def topology():
+def topology(data_dir: str = typer.Option("./data", help="Path to data directory")):
     """Display the network topology."""
-    console.print("[yellow]Not yet implemented. Coming in Phase 4.[/yellow]")
+    stores = _ensure_init(data_dir)
+    topo_graph = stores["graph"]
+
+    summary = topo_graph.get_topology_summary()
+    console.print(Panel(summary, title="Network Topology", border_style="blue"))
 
 
 @app.command()
-def incidents():
+def incidents(data_dir: str = typer.Option("./data", help="Path to data directory")):
     """List all open incidents."""
-    console.print("[yellow]Not yet implemented. Coming in Phase 4.[/yellow]")
+    stores = _ensure_init(data_dir)
+    raw_data = stores["raw_data"]
+
+    for inc in raw_data.get("incidents", []):
+        sev_color = "red" if inc.severity == "P1" else "yellow"
+        status_color = "red" if inc.status == "OPEN" else "yellow"
+
+        console.print(Panel(
+            f"[{sev_color}]{inc.severity}[/{sev_color}] | "
+            f"Status: [{status_color}]{inc.status}[/{status_color}] | "
+            f"Network: {inc.affected_network}\n\n"
+            f"Symptoms: {inc.symptom_summary}\n\n"
+            f"Impact: {inc.business_impact}\n\n"
+            f"Assigned to: {inc.assigned_to}",
+            title=f"{inc.ticket_id}: {inc.title}",
+            border_style=sev_color,
+        ))
 
 
 @app.command(name="security-scan")
-def security_scan():
+def security_scan(data_dir: str = typer.Option("./data", help="Path to data directory")):
     """Run a full security audit on the network."""
-    console.print("[yellow]Not yet implemented. Coming in Phase 4.[/yellow]")
+    from network_guy.agents.security.security_agent import analyze_security
+
+    stores = _ensure_init(data_dir)
+    raw_data = stores["raw_data"]
+
+    with console.status("Running security scan..."):
+        result = analyze_security(raw_data["security_events"], stores["metrics"])
+
+    # Verdict
+    verdict_color = {"ATTACK": "red", "LEGITIMATE": "green", "INCONCLUSIVE": "yellow"}
+    color = verdict_color.get(result.verdict.value, "white")
+
+    console.print(Panel(
+        f"[{color} bold]{result.verdict.value}[/{color} bold]\n"
+        f"Confidence: {result.confidence:.0%}\n"
+        f"Attack type: {result.attack_type.value if result.attack_type else 'N/A'}",
+        title="Security Verdict",
+        border_style=color,
+    ))
+
+    # Attack chain
+    if result.attack_chain:
+        console.print("\n[bold]Attack Chain:[/bold]")
+        for phase in result.attack_chain:
+            console.print(f"  {phase}")
+
+    # Evidence
+    if result.evidence:
+        console.print(f"\n[bold]Evidence ({len(result.evidence)} items):[/bold]")
+        for ev in result.evidence[:10]:
+            console.print(f"  {ev}")
+
+    # Containment
+    if result.containment_steps:
+        console.print("\n[bold red]Containment Steps:[/bold red]")
+        for i, step in enumerate(result.containment_steps, 1):
+            console.print(f"  {i}. {step}")
 
 
 @app.command()
