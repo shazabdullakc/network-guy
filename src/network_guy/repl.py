@@ -14,7 +14,7 @@ from pathlib import Path
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
-from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.formatted_text import HTML  # used in prompt display
 from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.styles import Style as PTStyle
 from rich.columns import Columns
@@ -103,7 +103,7 @@ class NetworkGuyCompleter(Completer):
                     yield Completion(
                         cmd + " " if args else cmd,
                         start_position=-len(cmd_part),
-                        display=HTML(f"<b>{display_text}</b>"),
+                        display=display_text,
                         display_meta=desc,
                     )
 
