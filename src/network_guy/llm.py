@@ -43,7 +43,13 @@ PROVIDERS = {
     "openrouter": {
         "env_key": "OPENROUTER_API_KEY",
         "base_url": "https://openrouter.ai/api/v1",
-        "model": "deepseek/deepseek-chat-v3-0324:free",
+        "model": "deepseek/deepseek-r1:free",
+        "type": "openai_compatible",
+    },
+    "groq": {
+        "env_key": "GROQ_API_KEY",
+        "base_url": "https://api.groq.com/openai/v1",
+        "model": "llama-3.3-70b-versatile",
         "type": "openai_compatible",
     },
     "grok": {
@@ -61,7 +67,7 @@ PROVIDERS = {
 }
 
 # Priority order for auto-detection
-PRIORITY = ["deepseek", "gemini", "openrouter", "grok", "anthropic"]
+PRIORITY = ["deepseek", "gemini", "groq", "openrouter", "grok", "anthropic"]
 
 
 def detect_provider() -> tuple[str, str] | None:
@@ -208,10 +214,11 @@ def _no_api_key_fallback(user_prompt: str) -> str:
     """When no API key is available, show raw findings."""
     return (
         "*No LLM API key detected. Set one of these environment variables:*\n"
-        "- `DEEPSEEK_API_KEY` (recommended, free 50M tokens)\n"
+        "- `DEEPSEEK_API_KEY` (free 50M tokens)\n"
         "- `GEMINI_API_KEY` (free 1M tokens/day)\n"
+        "- `GROQ_API_KEY` (free, fast inference)\n"
         "- `OPENROUTER_API_KEY` (free models available)\n"
-        "- `GROK_API_KEY` (free tier)\n"
+        "- `GROK_API_KEY` (xAI, free tier)\n"
         "- `ANTHROPIC_API_KEY` (paid)\n\n"
         "**Raw Agent Findings Below:**\n\n"
         + user_prompt
