@@ -37,7 +37,7 @@ PROVIDERS = {
     "gemini": {
         "env_key": "GEMINI_API_KEY",
         "base_url": None,  # Uses google SDK
-        "model": "gemini-2.0-flash",
+        "model": "gemini-2.5-flash",
         "type": "gemini",
     },
     "openrouter": {
