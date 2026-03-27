@@ -27,10 +27,26 @@ app = typer.Typer(
     name="network-guy",
     help="AI-Powered Network Troubleshooting Assistant",
     add_completion=False,
+    invoke_without_command=True,
 )
 console = Console()
 
 _stores: dict = {}
+
+
+@app.callback()
+def main(
+    ctx: typer.Context,
+    data_dir: str = typer.Option("./data", help="Path to data directory"),
+):
+    """AI-Powered Network Troubleshooting Assistant.
+
+    Run without a command to start the interactive session.
+    """
+    if ctx.invoked_subcommand is None:
+        # No subcommand → launch interactive REPL
+        from network_guy.repl import run_repl
+        run_repl(data_dir=data_dir)
 
 
 def _ensure_init(data_dir: str = "./data") -> dict:
